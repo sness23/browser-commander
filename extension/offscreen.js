@@ -7,9 +7,22 @@ const HEARTBEAT_MS = 15000;
 const RECONNECT_MS = 3000;
 
 async function getState() {
-  const { clientId, settings } = await chrome.storage.local.get({ clientId: '', settings: { serverUrl: 'ws://127.0.0.1:8080/ws', token: '', label: '' } });
-  const { mru = [] } = await chrome.storage.local.get({ mru: [] });
-  return { clientId, settings, mru };
+  try {
+    // Request state from background script since offscreen may not have storage access
+    const response = await chrome.runtime.sendMessage({ kind: 'getState' });
+    if (response && response.clientId) {
+      return response;
+    }
+  } catch (error) {
+    console.warn('Failed to get state from background:', error);
+  }
+  
+  // Fallback with defaults if all else fails
+  return {
+    clientId: crypto.randomUUID(),
+    settings: { serverUrl: 'ws://127.0.0.1:8080/ws', token: '', label: 'Unknown Client' },
+    mru: []
+  };
 }
 
 async function connect() {
@@ -61,8 +74,14 @@ async function connect() {
         const ok = await runSafeScript(msg);
         respond({ kind: 'ack', cmd: msg.kind, ok });
       } else if (msg.kind === 'requestMRU') {
-        const { mru } = await chrome.storage.local.get({ mru: [] });
-        respond({ kind: 'mru', mru, ts: Date.now() });
+        // Get MRU from background script instead of direct storage access
+        try {
+          const response = await chrome.runtime.sendMessage({ kind: 'getMRU' });
+          respond({ kind: 'mru', mru: response.mru || [], ts: Date.now() });
+        } catch (error) {
+          console.warn('Failed to get MRU from background:', error);
+          respond({ kind: 'mru', mru: [], ts: Date.now() });
+        }
       }
     } catch (e) {
       console.warn('bad message', e);
@@ -126,11 +145,34 @@ async function closeByHint({ tabId, urlContains }) {
 async function runSafeScript({ code, match }) {
   // Restrict execution to tabs that match the provided pattern.
   if (!match) return false;
-  const targets = await chrome.tabs.query({ url: match });
-  if (!targets.length) return false;
-  const [{ id }] = targets;
-  await chrome.scripting.executeScript({ target: { tabId: id }, func: new Function(code) });
-  return true;
+  
+  // Validate input parameters
+  if (typeof code !== 'string' || code.trim().length === 0) {
+    console.warn('runSafeScript: Invalid or empty code');
+    return false;
+  }
+  
+  if (typeof match !== 'string' || match.trim().length === 0) {
+    console.warn('runSafeScript: Invalid or empty match pattern');
+    return false;
+  }
+  
+  // Additional safety: limit code length to prevent abuse
+  if (code.length > 10000) {
+    console.warn('runSafeScript: Code too long, rejecting');
+    return false;
+  }
+  
+  try {
+    const targets = await chrome.tabs.query({ url: match });
+    if (!targets.length) return false;
+    const [{ id }] = targets;
+    await chrome.scripting.executeScript({ target: { tabId: id }, func: new Function(code) });
+    return true;
+  } catch (error) {
+    console.warn('runSafeScript: Error executing script', error);
+    return false;
+  }
 }
 
 // Receive MRU updates from background and forward to server
