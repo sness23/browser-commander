@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Local Browser Commander – Options</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; max-width: 720px; }
+  label { display:block; margin-top:12px; font-weight:600; }
+  input { width:100%; padding:8px; font-size:14px; }
+  .row { display:flex; gap:12px; }
+  .row > div { flex:1; }
+  button { margin-top:16px; padding:10px 14px; font-weight:600; }
+  .muted { color:#666; }
+</style>
+<h1>Local Browser Commander – Options</h1>
+<p>Configure the WebSocket server endpoint and an optional auth token.</p>
+<label>Server URL (WebSocket)</label>
+<input id="serverUrl" placeholder="ws://127.0.0.1:8080/ws">
+<div class="row">
+  <div>
+    <label>Label (for this browser/profile)</label>
+    <input id="label" placeholder="Studio-PC / Profile 2">
+  </div>
+  <div>
+    <label>Auth Token (optional)</label>
+    <input id="token" placeholder="">
+  </div>
+</div>
+<label>Client ID</label>
+<input id="clientId" disabled>
+<button id="save">Save</button>
+<p class="muted" id="status"></p>
+<script src="options.js"></script>

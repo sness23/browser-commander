@@ -1,0 +1,115 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Browser Commander</title>
+<style>
+  :root { font-family: system-ui, sans-serif; }
+  body { margin: 24px; }
+  h1 { margin-bottom: 8px; }
+  .muted { color:#666; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+  th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+  th { background: #f7f7f7; text-align: left; }
+  .mru { font-size: 12px; line-height: 1.3; }
+  .controls { margin: 16px 0; display:flex; gap:8px; align-items:center; }
+  input[type=text] { padding:8px; flex: 1; }
+  button { padding:8px 12px; font-weight:600; }
+  code { background:#f3f3f3; padding:2px 4px; }
+</style>
+<h1>Browser Commander</h1>
+<div class="muted">Connected clients on this LAN.</div>
+
+<div class="controls">
+  <input id="urlAll" type="text" placeholder="https://example.com/path">
+  <button id="openAll">Open URL in all clients</button>
+</div>
+
+<table id="tbl">
+  <thead>
+    <tr>
+      <th>Client</th>
+      <th>Platform</th>
+      <th>MRU (last 5)</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+  const token = localStorage.getItem('COMMAND_TOKEN') || '';
+  function authHeaders() {
+    const h = {};
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    return h;
+  }
+
+  async function loadClients() {
+    const res = await fetch('/api/clients', { headers: authHeaders() });
+    if (!res.ok) { console.error('Failed to load clients'); return; }
+    const data = await res.json();
+    const tbody = document.querySelector('#tbl tbody');
+    tbody.innerHTML = '';
+    for (const c of data.clients) {
+      const tr = document.createElement('tr');
+      const name = document.createElement('td');
+      name.innerHTML = `<b>${c.label || '(unnamed)'}</b><br><span class="muted">${c.clientId}</span><br><span class="muted">v${c.version||''}</span>`;
+      const plat = document.createElement('td');
+      plat.textContent = c.platform || '';
+
+      const mru = document.createElement('td'); mru.className = 'mru';
+      const items = (c.mru||[]).slice(0,5).map(x => {
+        const u = (x.url||'').slice(0,120);
+        const title = (x.title||'').slice(0,80);
+        return `<div title="${u}">${title || u}</div>`;
+      }).join('');
+      mru.innerHTML = items || '<span class="muted">no data</span>';
+
+      const act = document.createElement('td');
+      act.innerHTML = `
+        <div style="display:flex; gap:6px; margin-bottom:6px;">
+          <input type="text" placeholder="https://example.com" style="flex:1" class="u">
+          <button class="open">Open</button>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="focus">Focus last</button>
+          <button class="listTabs">List Tabs (console)</button>
+        </div>
+      `;
+
+      tr.appendChild(name); tr.appendChild(plat); tr.appendChild(mru); tr.appendChild(act);
+      tbody.appendChild(tr);
+
+      const urlInput = tr.querySelector('.u');
+      tr.querySelector('.open').addEventListener('click', () => send(c.clientId, { kind:'openUrl', url: urlInput.value, newTab:true, foreground:true }));
+      tr.querySelector('.focus').addEventListener('click', () => {
+        const last = (c.mru||[])[0];
+        if (!last) return;
+        send(c.clientId, { kind:'focusTab', tabId: last.tabId });
+      });
+      tr.querySelector('.listTabs').addEventListener('click', async () => {
+        await send(c.clientId, { kind:'listTabs' });
+        console.log('Requested tabs for', c.clientId, '— check server console for client responses if you log them.');
+      });
+    }
+  }
+
+  async function send(target, command) {
+    await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ target, command })
+    });
+  }
+
+  document.getElementById('openAll').addEventListener('click', async () => {
+    const url = document.getElementById('urlAll').value;
+    await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ target: 'all', command: { kind:'openUrl', url, newTab:true, foreground:true } })
+    });
+  });
+
+  loadClients();
+  setInterval(loadClients, 3000);
+</script>

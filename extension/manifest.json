@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Local Browser Commander",
+  "version": "0.1.0",
+  "description": "Receive commands from a local server to control tabs (open URL, focus, close, run script) and report MRU tabs.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting",
+    "offscreen",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}
